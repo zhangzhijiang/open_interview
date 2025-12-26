@@ -8,7 +8,8 @@ import { EmployerDashboard } from './components/EmployerDashboard';
 import { UserProfilePage } from './components/UserProfile';
 import { generateEvaluationReport } from './services/geminiService';
 import { signInAsGuest, signInWithGoogle, onAuthChange, getCurrentUser, signOutUser } from './services/authService';
-import { getUserProfile, saveUserProfile } from './services/userProfileService';
+import { getUserProfile, saveUserProfile, InterviewHistoryItem } from './services/userProfileService';
+import { Timestamp } from 'firebase/firestore';
 import { Sparkles, Briefcase, UserCircle, Upload, ArrowLeft, Loader2, Play, LogIn, LogOut } from 'lucide-react';
 import type { User } from 'firebase/auth';
 
@@ -69,15 +70,6 @@ export default function App() {
       }
     });
 
-    // Initial check - if no user, try to sign in anonymously
-    if (!getCurrentUser()) {
-      signInAsGuest().catch((error: any) => {
-        if (error.message?.includes('admin-restricted-operation') || error.message?.includes('not enabled')) {
-          console.warn('⚠️ Anonymous authentication disabled. User must sign in with Google.');
-          setAnonymousAuthAvailable(false);
-        }
-      });
-    }
 
     return unsubscribe;
   }, []);
@@ -95,13 +87,16 @@ export default function App() {
   const handleResumeUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        // Simplified text extraction for demo (works best with .txt, naive for .pdf)
-        // In a real app, use PDF.js or a server-side parser
-        setResumeText(ev.target?.result as string);
-      };
-      reader.readAsText(file);
+      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const content = ev.target?.result as string;
+          setResumeText(content);
+        };
+        reader.readAsText(file);
+      } else {
+        alert('Please upload a .txt file');
+      }
     }
   };
 
@@ -132,6 +127,8 @@ export default function App() {
   const handleSignInWithGoogle = async () => {
     try {
       await signInWithGoogle();
+      // Reset view to HOME - auth state change listener will handle profile loading
+      setView('HOME');
     } catch (error: any) {
       alert(`Failed to sign in with Google: ${error.message}`);
     }
@@ -140,6 +137,8 @@ export default function App() {
   const handleSignOut = async () => {
     try {
       await signOutUser();
+      // Reset view and state - auth state change listener will handle anonymous sign-in
+      setView('HOME');
       setApplicantName('');
       setResumeText('');
       setUserApiKey(undefined);
@@ -162,6 +161,35 @@ export default function App() {
     if (selectedJob) {
       const result = await generateEvaluationReport(transcript, selectedJob.title, applicantName, apiKeyUsed);
       setEvaluation(result);
+      
+      // Save interview history (keep only 3 most recent)
+      if (user) {
+        try {
+          const currentProfile = await getUserProfile();
+          const existingHistory = currentProfile?.interviewHistory || [];
+          
+          // Create new history item
+          const newHistoryItem: InterviewHistoryItem = {
+            id: Date.now().toString(),
+            jobTitle: selectedJob.title,
+            jobId: selectedJob.id,
+            transcript: transcript,
+            evaluation: result,
+            timestamp: Timestamp.now(),
+          };
+          
+          // Add new item and keep only the 3 most recent
+          const updatedHistory = [newHistoryItem, ...existingHistory].slice(0, 3);
+          
+          await saveUserProfile({
+            interviewHistory: updatedHistory,
+          });
+        } catch (error) {
+          console.error('Error saving interview history:', error);
+          // Don't block the user from seeing the report if history save fails
+        }
+      }
+      
       setIsGeneratingReport(false);
       setView('REPORT');
     }
@@ -186,8 +214,7 @@ export default function App() {
           onClick={() => setView('EMPLOYER_DASHBOARD')}
           className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors"
         >
-          Post a Job (Employer)
-        </button>
+          Post a Job         </button>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -282,20 +309,39 @@ export default function App() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Upload Resume (Text/TXT)</label>
-            <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 hover:bg-slate-50 transition-colors cursor-pointer relative">
-              <input 
-                type="file" 
-                accept=".txt,.md" 
-                onChange={handleResumeUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="flex flex-col items-center gap-2 text-slate-500">
-                <Upload size={24} />
-                <span className="text-sm">{resumeText ? 'Resume Loaded ✓' : 'Click to upload .txt file'}</span>
-              </div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-slate-700">Upload Resume</label>
+              <label className="relative">
+                <input
+                  type="file"
+                  accept=".txt"
+                  onChange={handleResumeUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 transition-colors cursor-pointer"
+                >
+                  <Upload size={16} />
+                  Upload .txt file
+                </button>
+              </label>
             </div>
-            {resumeText && <p className="text-xs text-green-600 mt-2 font-medium">Successfully read {resumeText.length} characters.</p>}
+            <p className="text-xs text-slate-500 mb-3">
+              Upload a text file or paste your resume content. This helps the AI interviewer understand your background.
+            </p>
+            <textarea
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+              placeholder="Paste your resume content here, or click 'Upload .txt file' button above..."
+              rows={12}
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all font-mono text-sm resize-y"
+            />
+            {resumeText && (
+              <p className="text-xs text-green-600 mt-2 font-medium">
+                {resumeText.length} characters loaded
+              </p>
+            )}
           </div>
 
           <button 
@@ -420,6 +466,10 @@ export default function App() {
                 <UserProfilePage 
                   onBack={() => setView('HOME')} 
                   onProfileUpdate={handleProfileUpdate}
+                  onJobSelect={(job) => {
+                    setSelectedJob(job);
+                    setView('JOB_DETAILS');
+                  }}
                 />
               </div>
             )}

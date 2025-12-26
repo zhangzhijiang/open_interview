@@ -1,21 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { saveUserProfile, getUserProfile, UserProfile } from '../services/userProfileService';
+import { saveUserProfile, getUserProfile, UserProfile, InterviewHistoryItem } from '../services/userProfileService';
 import { getCurrentUser } from '../services/authService';
-import { UserCircle, Upload, Save, KeyRound, FileText, ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react';
+import { Job } from '../types';
+import { JobCard } from './JobCard';
+import { EmployerDashboard } from './EmployerDashboard';
+import { UserCircle, Upload, Save, KeyRound, FileText, ArrowLeft, AlertCircle, CheckCircle, Briefcase, X, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface UserProfileProps {
   onBack: () => void;
   onProfileUpdate?: (name: string, resumeText: string, apiKey?: string) => void;
+  onJobSelect?: (job: Job) => void;
 }
 
-export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileUpdate }) => {
+export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileUpdate, onJobSelect }) => {
   const [name, setName] = useState('');
   const [resumeText, setResumeText] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [savedJobs, setSavedJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [interviewHistory, setInterviewHistory] = useState<InterviewHistoryItem[]>([]);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   // Load existing profile
   useEffect(() => {
@@ -26,6 +34,8 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
           setName(profile.name || '');
           setResumeText(profile.resumeText || '');
           setApiKey(profile.apiKey || '');
+          setSavedJobs(profile.savedJobs || []);
+          setInterviewHistory(profile.interviewHistory || []);
         }
       } catch (error) {
         console.error('Error loading profile:', error);
@@ -49,6 +59,43 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
         reader.readAsText(file);
       } else {
         alert('Please upload a .txt file');
+      }
+    }
+  };
+
+  const handlePostJob = async (job: Job) => {
+    if (savedJobs.length >= 3) {
+      alert('You can only save up to 3 jobs. Please remove one before adding a new one.');
+      return;
+    }
+    const updatedJobs = [...savedJobs, job];
+    setSavedJobs(updatedJobs);
+    setShowJobForm(false);
+    
+    // Auto-save when a job is added
+    if (getCurrentUser()) {
+      try {
+        await saveUserProfile({
+          savedJobs: updatedJobs,
+        });
+      } catch (error) {
+        console.error('Error saving jobs:', error);
+      }
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    const updatedJobs = savedJobs.filter(job => job.id !== jobId);
+    setSavedJobs(updatedJobs);
+    
+    // Auto-save when a job is removed
+    if (getCurrentUser()) {
+      try {
+        await saveUserProfile({
+          savedJobs: updatedJobs,
+        });
+      } catch (error) {
+        console.error('Error saving jobs:', error);
       }
     }
   };
@@ -77,6 +124,7 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
         name: name.trim(),
         resumeText: resumeText.trim() || undefined,
         apiKey: apiKey.trim() || undefined,
+        savedJobs: savedJobs,
       };
 
       await saveUserProfile(profileData);
@@ -163,55 +211,6 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
             />
           </div>
 
-          {/* Resume Section */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Resume / CV
-            </label>
-            <p className="text-xs text-slate-500 mb-3">
-              Upload a text file or paste your resume content. This helps the AI interviewer understand your background.
-            </p>
-            
-            {/* Upload Option */}
-            <div className="mb-4">
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Upload Resume (TXT file)
-              </label>
-              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 hover:bg-slate-50 transition-colors cursor-pointer relative">
-                <input
-                  type="file"
-                  accept=".txt"
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <div className="flex flex-col items-center gap-2 text-slate-500">
-                  <Upload size={24} />
-                  <span className="text-sm">Click to upload .txt file</span>
-                  <span className="text-xs text-slate-400">or paste content below</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Textarea Option */}
-            <div>
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Or Paste Resume Content
-              </label>
-              <textarea
-                value={resumeText}
-                onChange={(e) => setResumeText(e.target.value)}
-                placeholder="Paste your resume content here, or upload a .txt file above..."
-                rows={12}
-                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all font-mono text-sm resize-y"
-              />
-              {resumeText && (
-                <p className="text-xs text-green-600 mt-2 font-medium">
-                  {resumeText.length} characters loaded
-                </p>
-              )}
-            </div>
-          </div>
-
           {/* API Key Section */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -234,6 +233,231 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
             <p className="text-xs text-slate-400 mt-2">
               Your API key is stored securely and only used for your interviews.
             </p>
+          </div>
+
+          {/* Resume Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                My Resume 
+              </label>
+              <label className="relative">
+                <input
+                  type="file"
+                  accept=".txt"
+                  onChange={handleFileUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 transition-colors cursor-pointer"
+                >
+                  <Upload size={16} />
+                  Upload .txt file
+                </button>
+              </label>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Upload a text file or paste your resume content. This helps the AI interviewer understand your background.
+            </p>
+            <textarea
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+              placeholder="Paste your resume content here, or click 'Upload .txt file' button above..."
+              rows={12}
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all font-mono text-sm resize-y"
+            />
+            {resumeText && (
+              <p className="text-xs text-green-600 mt-2 font-medium">
+                {resumeText.length} characters loaded
+              </p>
+            )}
+          </div>
+
+          {/* My Saved Jobs Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                My Saved Jobs
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowJobForm(true)}
+                disabled={savedJobs.length >= 3}
+                className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors ${
+                  savedJobs.length >= 3
+                    ? 'bg-slate-100 border-slate-300 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                }`}
+              >
+                <Briefcase size={16} />
+                Add Job {savedJobs.length > 0 && `(${savedJobs.length}/3)`}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Save up to 3 jobs you're interested in. These jobs will be available for you to practice interviews.
+            </p>
+            
+            {savedJobs.length === 0 ? (
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
+                <Briefcase size={32} className="mx-auto text-slate-400 mb-2" />
+                <p className="text-slate-500 text-sm">No saved jobs yet</p>
+                <p className="text-slate-400 text-xs mt-1">Click "Add Job" to save a job you're interested in</p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {savedJobs.map((job) => (
+                  <div key={job.id} className="relative">
+                    <JobCard 
+                      job={job} 
+                      onSelect={(selectedJob) => {
+                        if (onJobSelect) {
+                          onJobSelect(selectedJob);
+                        }
+                      }} 
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent triggering the card click
+                        handleDeleteJob(job.id);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors z-10"
+                      title="Delete job"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Interview History Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Interview History
+              </label>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Your last 3 interview sessions with transcripts and evaluation reports.
+            </p>
+            
+            {interviewHistory.length === 0 ? (
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
+                <Clock size={32} className="mx-auto text-slate-400 mb-2" />
+                <p className="text-slate-500 text-sm">No interview history yet</p>
+                <p className="text-slate-400 text-xs mt-1">Complete an interview to see your history here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {interviewHistory.map((item) => {
+                  const isExpanded = expandedHistoryId === item.id;
+                  const date = item.timestamp?.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
+                  const formattedDate = date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                  
+                  return (
+                    <div key={item.id} className="border border-slate-200 rounded-lg overflow-hidden">
+                      <div 
+                        className="bg-slate-50 p-4 cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-slate-900">{item.jobTitle}</h4>
+                            <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <Clock size={12} />
+                                {formattedDate}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                Score: <span className="font-semibold text-primary-600">{item.evaluation.score}/100</span>
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                item.evaluation.hiringRecommendation === 'Strong Hire' 
+                                  ? 'bg-green-100 text-green-700'
+                                  : item.evaluation.hiringRecommendation === 'Hire'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {item.evaluation.hiringRecommendation}
+                              </span>
+                            </div>
+                          </div>
+                          {isExpanded ? (
+                            <ChevronUp size={20} className="text-slate-400" />
+                          ) : (
+                            <ChevronDown size={20} className="text-slate-400" />
+                          )}
+                        </div>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="p-4 bg-white border-t border-slate-200 space-y-4">
+                          {/* Evaluation Report */}
+                          <div>
+                            <h5 className="font-semibold text-slate-700 mb-2 text-sm">Evaluation Report</h5>
+                            <div className="bg-slate-50 rounded-lg p-4 space-y-3 text-sm">
+                              <div>
+                                <p className="font-medium text-slate-700 mb-1">Summary</p>
+                                <p className="text-slate-600">{item.evaluation.summary}</p>
+                              </div>
+                              
+                              <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                  <p className="font-medium text-slate-700 mb-1">Strengths</p>
+                                  <ul className="list-disc list-inside text-slate-600 space-y-1">
+                                    {item.evaluation.strengths.map((strength, idx) => (
+                                      <li key={idx}>{strength}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div>
+                                  <p className="font-medium text-slate-700 mb-1">Weaknesses</p>
+                                  <ul className="list-disc list-inside text-slate-600 space-y-1">
+                                    {item.evaluation.weaknesses.map((weakness, idx) => (
+                                      <li key={idx}>{weakness}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <p className="font-medium text-slate-700 mb-1">Technical Assessment</p>
+                                <p className="text-slate-600">{item.evaluation.technicalAssessment}</p>
+                              </div>
+                              
+                              <div>
+                                <p className="font-medium text-slate-700 mb-1">Communication Skills</p>
+                                <p className="text-slate-600">{item.evaluation.communicationSkills}</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Transcript */}
+                          <div>
+                            <h5 className="font-semibold text-slate-700 mb-2 text-sm">Interview Transcript</h5>
+                            <textarea
+                              value={item.transcript}
+                              readOnly
+                              rows={10}
+                              className="w-full p-3 border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs resize-y text-slate-700"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Save Button */}
@@ -268,6 +492,29 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
           </div>
         </div>
       </div>
+
+      {/* Job Form Modal */}
+      {showJobForm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Add Saved Job</h2>
+              <button
+                onClick={() => setShowJobForm(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4">
+              <EmployerDashboard 
+                onPostJob={handlePostJob} 
+                onCancel={() => setShowJobForm(false)} 
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

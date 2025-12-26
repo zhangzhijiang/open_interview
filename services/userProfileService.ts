@@ -8,12 +8,24 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase/config';
 import { getCurrentUser } from './authService';
+import { Job, EvaluationResult } from '../types';
+
+export interface InterviewHistoryItem {
+  id: string; // Unique ID for this interview (timestamp-based)
+  jobTitle: string; // Job title at time of interview
+  jobId?: string; // Job ID if available
+  transcript: string; // Full conversation transcript
+  evaluation: EvaluationResult; // Evaluation report
+  timestamp: Timestamp; // When the interview was completed
+}
 
 export interface UserProfile {
   name: string;
   email?: string;
   resumeText?: string;
   apiKey?: string; // User's own API key for BYOK feature
+  savedJobs?: Job[]; // User's saved jobs (max 3)
+  interviewHistory?: InterviewHistoryItem[]; // Interview history (max 3)
   isAnonymous: boolean;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
