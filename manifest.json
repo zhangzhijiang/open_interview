@@ -1,0 +1,12 @@
+{
+  "name": "Open Interview",
+  "short_name": "Open Interview",
+  "description": "An AI-powered recruitment platform where employers post jobs and applicants undergo real-time video screening interviews with an AI agent.",
+  "package_identifier": "com.idatagear.open_interview",
+  "start_url": "/interview/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0284c7",
+  "icons": []
+}
+
