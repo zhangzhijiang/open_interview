@@ -90,6 +90,18 @@ VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
    - Add project support email
    - Configure OAuth consent screen (if needed)
 
+#### Configure Authorized Domains (Required for Production)
+
+**Important**: Before deploying, add your production domain to Firebase authorized domains:
+
+1. Go to Firebase Console > Authentication > Settings > **Authorized domains**
+2. Click **Add domain**
+3. Add your deployment domain (e.g., `www.idatagear.com`)
+4. Optionally add domain without www (e.g., `idatagear.com`)
+5. Click **Done**
+
+Without this, users will see `auth/unauthorized-domain` errors when trying to sign in with Google.
+
 #### Configure Firestore
 
 1. Go to Firebase Console > Firestore Database
@@ -583,6 +595,19 @@ If issues are found after deployment:
   - Check Firebase project is active
   - Verify authentication methods enabled
   - Check Firestore rules allow access
+
+#### Firebase Authentication: `auth/unauthorized-domain` Error
+- **Cause**: Your deployment domain is not authorized in Firebase Console
+- **Solution**:
+  1. Go to [Firebase Console](https://console.firebase.google.com/)
+  2. Select your project
+  3. Go to **Authentication** → **Settings** → **Authorized domains**
+  4. Click **Add domain**
+  5. Add your deployment domain (e.g., `www.idatagear.com`)
+  6. Optionally add domain without www (e.g., `idatagear.com`)
+  7. Click **Done**
+  8. Wait a few minutes for changes to propagate
+  9. Clear browser cache and try again
 
 #### CORS Errors
 - **Solution**:
