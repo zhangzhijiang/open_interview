@@ -51,6 +51,24 @@ export function createBlob(data: Float32Array): GenAIBlob {
   };
 }
 
+// Helper function to generate a default "No Hire" report for short interviews
+function generateShortInterviewReport(
+  jobTitle: string,
+  candidateName: string
+): EvaluationResult {
+  return {
+    candidateName,
+    role: jobTitle,
+    score: 0,
+    strengths: [],
+    weaknesses: ["Interview was too short to provide adequate assessment. Insufficient conversation data for evaluation."],
+    technicalAssessment: "N/A - Interview duration was less than 1 minute. Not enough information to assess technical skills.",
+    communicationSkills: "N/A - Interview duration was less than 1 minute. Not enough information to assess communication skills.",
+    hiringRecommendation: "No Hire",
+    summary: "The interview session was too brief (less than 1 minute) to gather sufficient information for a proper evaluation. A complete assessment requires a more substantial conversation with the candidate."
+  };
+}
+
 // Function to generate the final evaluation report using Flash
 export async function generateEvaluationReport(
   transcript: string, 
@@ -61,6 +79,15 @@ export async function generateEvaluationReport(
   console.log('[geminiService] Generating evaluation report...');
   console.log('[geminiService] Transcript length:', transcript.length);
   console.log('[geminiService] API Key provided:', !!apiKey);
+  
+  // Check if interview was too short (less than ~200 characters suggests < 1 minute)
+  // This is a reasonable proxy: typical speaking rate is 150-200 words per minute,
+  // so less than ~30-40 words (roughly 200 characters) indicates < 1 minute
+  const MIN_TRANSCRIPT_LENGTH = 200;
+  if (transcript.trim().length < MIN_TRANSCRIPT_LENGTH) {
+    console.log('[geminiService] ⚠️ Interview too short (< 1 minute), skipping AI evaluation');
+    return generateShortInterviewReport(jobTitle, candidateName);
+  }
   
   // Use provided key, or fallback to environment variable
   const finalKey = apiKey || process.env.GEMINI_API_KEY || "";

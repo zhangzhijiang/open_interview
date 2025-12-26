@@ -3,7 +3,8 @@ import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { Job, ApplicantData } from '../types';
 import { SYSTEM_INSTRUCTION_TEMPLATE } from '../constants';
 import { createBlob, decodeAudioData } from '../services/geminiService';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, User, Bot, Loader2, AlertCircle, Play, KeyRound, X, Clock } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, User, Bot, Loader2, AlertCircle, Play, KeyRound, X, Clock, HelpCircle } from 'lucide-react';
+import { ApiKeyInstructionsModal } from './ApiKeyInstructionsModal';
 
 interface InterviewSessionProps {
   job: Job;
@@ -25,6 +26,7 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
   const [defaultApiKey] = useState(process.env.GEMINI_API_KEY || "");
   const [customApiKey, setCustomApiKey] = useState<string>('');
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showApiKeyInstructions, setShowApiKeyInstructions] = useState(false);
   const [usingCustomKey, setUsingCustomKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   
@@ -478,13 +480,23 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
                 </div>
               </div>
               {!usingCustomKey && (
-                <button
-                  onClick={handleUseCustomKey}
-                  className="w-full py-2.5 px-4 rounded-lg border border-slate-600 hover:border-slate-500 bg-slate-800/50 hover:bg-slate-800 text-sm font-medium text-slate-300 hover:text-white transition-all flex items-center justify-center gap-2"
-                >
-                  <KeyRound size={14} />
-                  Use My Own API Key
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleUseCustomKey}
+                    className="w-full py-2.5 px-4 rounded-lg border border-blue-500 hover:border-blue-400 bg-blue-500/10 hover:bg-blue-500/20 text-sm font-medium text-blue-400 hover:text-blue-300 transition-all flex items-center justify-center gap-2"
+                  >
+                    <KeyRound size={14} />
+                    Use My Own API Key
+                  </button>
+                  <button
+                    onClick={() => setShowApiKeyInstructions(true)}
+                    className="w-full text-xs text-slate-400 hover:text-blue-400 transition-colors flex items-center justify-center gap-1"
+                    title="How to get your Gemini API Key"
+                  >
+                    <HelpCircle size={12} />
+                    How to get an API Key?
+                  </button>
+                </div>
               )}
               {usingCustomKey && (
                 <button
@@ -521,6 +533,12 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
         </div>
       </div>
       
+      {/* API Key Instructions Modal */}
+      <ApiKeyInstructionsModal 
+        isOpen={showApiKeyInstructions}
+        onClose={() => setShowApiKeyInstructions(false)}
+      />
+
       {/* API Key Modal */}
       {showApiKeyModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -550,9 +568,21 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Gemini API Key
-                </label>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="block text-sm font-medium text-slate-300 flex-1">
+                    Gemini API Key
+                  </label>
+                  <button
+                    onClick={() => {
+                      setShowApiKeyModal(false);
+                      setShowApiKeyInstructions(true);
+                    }}
+                    className="text-slate-400 hover:text-blue-400 transition-colors"
+                    title="How to get your Gemini API Key"
+                  >
+                    <HelpCircle size={16} />
+                  </button>
+                </div>
                 <div className="relative">
                   <KeyRound size={16} className="absolute left-3 top-3 text-slate-400" />
                   <input

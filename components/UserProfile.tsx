@@ -4,7 +4,8 @@ import { getCurrentUser } from '../services/authService';
 import { Job } from '../types';
 import { JobCard } from './JobCard';
 import { EmployerDashboard } from './EmployerDashboard';
-import { UserCircle, Upload, Save, KeyRound, FileText, ArrowLeft, AlertCircle, CheckCircle, Briefcase, X, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { ApiKeyInstructionsModal } from './ApiKeyInstructionsModal';
+import { UserCircle, Upload, Save, KeyRound, FileText, ArrowLeft, AlertCircle, CheckCircle, Briefcase, X, Clock, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 
 interface UserProfileProps {
   onBack: () => void;
@@ -24,6 +25,7 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
   const [showJobForm, setShowJobForm] = useState(false);
   const [interviewHistory, setInterviewHistory] = useState<InterviewHistoryItem[]>([]);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [showApiKeyInstructions, setShowApiKeyInstructions] = useState(false);
 
   // Load existing profile
   useEffect(() => {
@@ -213,9 +215,19 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
 
           {/* API Key Section */}
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Gemini API Key (Optional)
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Gemini API Key (Optional)
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowApiKeyInstructions(true)}
+                className="text-slate-400 hover:text-blue-600 transition-colors"
+                title="How to get your Gemini API Key"
+              >
+                <HelpCircle size={16} />
+              </button>
+            </div>
             <p className="text-xs text-slate-500 mb-3">
               Bring Your Own Key (BYOK): Use your own Gemini API key for interviews. 
               If not provided, the default system key will be used.
@@ -492,6 +504,12 @@ export const UserProfilePage: React.FC<UserProfileProps> = ({ onBack, onProfileU
           </div>
         </div>
       </div>
+
+      {/* API Key Instructions Modal */}
+      <ApiKeyInstructionsModal 
+        isOpen={showApiKeyInstructions}
+        onClose={() => setShowApiKeyInstructions(false)}
+      />
 
       {/* Job Form Modal */}
       {showJobForm && (
