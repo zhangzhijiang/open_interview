@@ -58,8 +58,117 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
 
   const sessionRef = useRef<Promise<any> | null>(null); 
   const disconnectCallbackRef = useRef<(() => void) | null>(null);
+  const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isConnectedRef = useRef<boolean>(false);
 
   const [displayTranscript, setDisplayTranscript] = useState<{role: 'user' | 'ai', text: string}[]>([]);
+
+  // Helper function to parse and format API errors
+  const parseApiError = (err: any): { userMessage: string; logMessage: string; errorType: string } => {
+    const errorStr = err?.toString() || '';
+    const errorMessage = (err?.message || (err instanceof Error ? err.message : errorStr)) || errorStr;
+    const errorCode = (err?.code || err?.status || err?.statusCode || (err as any)?.error?.code || '') || '';
+    const errorName = (err?.name || (err instanceof Error ? err.name : undefined)) || undefined;
+    const errorStack = (err?.stack || (err instanceof Error ? err.stack : undefined)) || undefined;
+    const errorDetails = (err?.details || (err as any)?.error?.details || (err as any)?.error?.message) || undefined;
+    
+    console.error('[InterviewSession] Raw error object:', {
+      error: err,
+      message: errorMessage,
+      code: errorCode,
+      name: errorName,
+      stack: errorStack,
+      details: errorDetails,
+      status: err?.status || err?.statusCode,
+      type: typeof err,
+      isError: err instanceof Error,
+    });
+
+    // Check for quota errors
+    if (
+      errorMessage.includes('quota') || 
+      errorMessage.includes('Quota') ||
+      errorMessage.includes('QUOTA_EXCEEDED') ||
+      errorCode === 429 ||
+      errorMessage.includes('Resource has been exhausted')
+    ) {
+      return {
+        errorType: 'QUOTA_EXCEEDED',
+        userMessage: 'API quota exceeded. You have reached your API usage limit. Please try again later or check your API key limits.',
+        logMessage: `Quota exceeded: ${errorMessage} (Code: ${errorCode})`
+      };
+    }
+
+    // Check for API key errors
+    if (
+      errorMessage.includes('API key') ||
+      errorMessage.includes('api key') ||
+      errorMessage.includes('API_KEY') ||
+      errorMessage.includes('INVALID_API_KEY') ||
+      errorMessage.includes('invalid') && errorMessage.includes('key') ||
+      errorCode === 401 ||
+      errorCode === 403
+    ) {
+      return {
+        errorType: 'INVALID_API_KEY',
+        userMessage: 'Invalid API key. Please check your API key is correct and has the necessary permissions for the Gemini API.',
+        logMessage: `Invalid API key: ${errorMessage} (Code: ${errorCode})`
+      };
+    }
+
+    // Check for authentication errors
+    if (
+      errorMessage.includes('authentication') ||
+      errorMessage.includes('unauthorized') ||
+      errorMessage.includes('Unauthorized') ||
+      errorCode === 401
+    ) {
+      return {
+        errorType: 'AUTH_ERROR',
+        userMessage: 'Authentication failed. Please verify your API key is valid and has access to the Gemini API.',
+        logMessage: `Authentication error: ${errorMessage} (Code: ${errorCode})`
+      };
+    }
+
+    // Check for permission errors
+    if (
+      errorMessage.includes('permission') ||
+      errorMessage.includes('Permission') ||
+      errorMessage.includes('PERMISSION_DENIED') ||
+      errorCode === 403
+    ) {
+      return {
+        errorType: 'PERMISSION_DENIED',
+        userMessage: 'Permission denied. Your API key does not have access to this resource. Please check your API key permissions.',
+        logMessage: `Permission denied: ${errorMessage} (Code: ${errorCode})`
+      };
+    }
+
+    // Check for network/connection errors
+    if (
+      errorMessage.includes('network') ||
+      errorMessage.includes('Network') ||
+      errorMessage.includes('connection') ||
+      errorMessage.includes('Connection') ||
+      errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('ENOTFOUND') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('Timeout')
+    ) {
+      return {
+        errorType: 'NETWORK_ERROR',
+        userMessage: 'Network connection error. Please check your internet connection and try again.',
+        logMessage: `Network error: ${errorMessage} (Code: ${errorCode})`
+      };
+    }
+
+    // Generic error
+    return {
+      errorType: 'UNKNOWN_ERROR',
+      userMessage: `Connection error: ${errorMessage || 'Unknown error occurred. Please check your API key and try again.'}`,
+      logMessage: `Unknown error: ${errorMessage} (Code: ${errorCode})`
+    };
+  };
 
   // Cleanup function
   const cleanup = useCallback(async () => {
@@ -166,6 +275,8 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
 
     setError(null);
     setHasStarted(true);
+    setIsConnected(false);
+    isConnectedRef.current = false;
     // Don't start timer yet - wait for successful connection
     setSessionStartTime(null);
     setTimeRemaining(null);
@@ -222,11 +333,15 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
       }
 
       console.log('[InterviewSession] Step 3: Initializing GoogleGenAI...');
+      console.log('[InterviewSession] API Key length:', apiKey?.length || 0);
+      console.log('[InterviewSession] API Key prefix:', apiKey?.substring(0, 10) || 'N/A');
       // 3. Connect to Live API
       const ai = new GoogleGenAI({ apiKey: apiKey });
       console.log('[InterviewSession] GoogleGenAI instance created');
       
       console.log('[InterviewSession] Step 4: Connecting to Live API...');
+      console.log('[InterviewSession] Model: gemini-2.5-flash-native-audio-preview-09-2025');
+      console.log('[InterviewSession] If connection fails, check the console for error messages below.');
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
@@ -245,6 +360,7 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
               return;
             }
             setIsConnected(true);
+            isConnectedRef.current = true;
             clearTimeout(connectionTimeout);
             
             // Start the timer now that connection is established
@@ -259,10 +375,26 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
             const processor = inputCtx.createScriptProcessor(4096, 1, 1);
             
             processor.onaudioprocess = (e) => {
-              if (!isMounted) return;
-              const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData);
-              sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
+              if (!isMounted || !isConnectedRef.current) return;
+              try {
+                const inputData = e.inputBuffer.getChannelData(0);
+                const pcmBlob = createBlob(inputData);
+                sessionPromise.then(session => {
+                  if (isConnectedRef.current) {
+                    session.sendRealtimeInput({ media: pcmBlob });
+                  }
+                }).catch(err => {
+                  // Silently ignore errors if connection is closed
+                  if (isMounted) {
+                    console.warn('[InterviewSession] Audio send error (connection likely closed):', err);
+                  }
+                });
+              } catch (err) {
+                // Silently ignore errors if connection is closed
+                if (isMounted && isConnectedRef.current) {
+                  console.warn('[InterviewSession] Audio processing error:', err);
+                }
+              }
             };
 
             source.connect(processor);
@@ -270,23 +402,45 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
 
             // Video Frames
             const intervalId = setInterval(async () => {
-               if (!isMounted || !videoRef.current || !canvasRef.current) return;
+               if (!isMounted || !isConnectedRef.current || !videoRef.current || !canvasRef.current) return;
                
-               const ctx = canvasRef.current.getContext('2d');
-               if (!ctx) return;
+               try {
+                 const ctx = canvasRef.current.getContext('2d');
+                 if (!ctx) return;
 
-               canvasRef.current.width = videoRef.current.videoWidth * 0.25; 
-               canvasRef.current.height = videoRef.current.videoHeight * 0.25;
-               ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-               
-               const base64Data = canvasRef.current.toDataURL('image/jpeg', 0.5).split(',')[1];
-               sessionPromise.then(session => session.sendRealtimeInput({ 
-                 media: { mimeType: 'image/jpeg', data: base64Data } 
-               }));
-            }, 1000); 
+                 canvasRef.current.width = videoRef.current.videoWidth * 0.25; 
+                 canvasRef.current.height = videoRef.current.videoHeight * 0.25;
+                 ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+                 
+                 const base64Data = canvasRef.current.toDataURL('image/jpeg', 0.5).split(',')[1];
+                 sessionPromise.then(session => {
+                   if (isConnectedRef.current) {
+                     session.sendRealtimeInput({ 
+                       media: { mimeType: 'image/jpeg', data: base64Data } 
+                     });
+                   }
+                 }).catch(err => {
+                   // Silently ignore errors if connection is closed
+                   if (isMounted) {
+                     console.warn('[InterviewSession] Video send error (connection likely closed):', err);
+                   }
+                 });
+               } catch (err) {
+                 // Silently ignore errors if connection is closed
+                 if (isMounted && isConnectedRef.current) {
+                   console.warn('[InterviewSession] Video processing error:', err);
+                 }
+               }
+            }, 1000);
+            
+            videoIntervalRef.current = intervalId;
 
             disconnectCallbackRef.current = () => {
-              clearInterval(intervalId);
+              isConnectedRef.current = false;
+              if (videoIntervalRef.current) {
+                clearInterval(videoIntervalRef.current);
+                videoIntervalRef.current = null;
+              }
               source.disconnect();
               processor.disconnect();
             };
@@ -348,9 +502,25 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
               currentOutputTransRef.current = "";
             }
           },
-          onclose: () => {
+          onclose: (event) => {
             console.log('[InterviewSession] ⚠️ Connection closed');
+            console.log('[InterviewSession] Close event details:', {
+              code: event?.code,
+              reason: event?.reason,
+              wasClean: event?.wasClean,
+              event: event
+            });
+            console.log('[InterviewSession] ⚠️ If connection closes immediately after opening, this usually indicates:');
+            console.log('[InterviewSession]   1. API quota exceeded (connection opens but gets rejected)');
+            console.log('[InterviewSession]   2. Invalid API key or permissions issue');
+            console.log('[InterviewSession]   3. Network/authentication issue');
+            console.log('[InterviewSession] Check the Network tab (F12 → Network → WS filter) for WebSocket close frames');
             if (isMounted) {
+              // Clean up audio/video processing
+              if (disconnectCallbackRef.current) {
+                disconnectCallbackRef.current();
+                disconnectCallbackRef.current = null;
+              }
               // Stop timer when connection closes
               if (timerIntervalRef.current) {
                 clearInterval(timerIntervalRef.current);
@@ -359,16 +529,39 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
               setSessionStartTime(null);
               setTimeRemaining(null);
               setIsConnected(false);
+              isConnectedRef.current = false;
+              // Show error message if connection closed unexpectedly
+              if (event?.code !== 1000 && event?.code !== 1001) { // Normal closure codes
+                setError(`Connection closed unexpectedly (code: ${event?.code || 'unknown'}). This usually indicates API quota exceeded, invalid API key, or network issues. Check the browser console for details.`);
+                setHasStarted(false);
+              }
             }
           },
           onerror: (err) => {
-            console.error('[InterviewSession] ❌ Session Error:', err);
-            console.error('[InterviewSession] Error details:', {
-              message: err instanceof Error ? err.message : String(err),
-              stack: err instanceof Error ? err.stack : undefined,
-              fullError: err
+            console.error('[InterviewSession] ❌ Session Error (onerror callback):', err);
+            
+            // Parse the error to get user-friendly message
+            const { userMessage, logMessage, errorType } = parseApiError(err);
+            
+            console.error(`[InterviewSession] Error Type: ${errorType}`);
+            console.error(`[InterviewSession] ${logMessage}`);
+            console.error('[InterviewSession] Full error details:', {
+              error: err,
+              message: (err as any)?.message || (err instanceof Error ? err.message : String(err)),
+              code: (err as any)?.code || (err as any)?.status || (err as any)?.statusCode || (err as any)?.error?.code,
+              name: (err as any)?.name || (err instanceof Error ? err.name : undefined),
+              stack: (err as any)?.stack || (err instanceof Error ? err.stack : undefined),
+              details: (err as any)?.details || (err as any)?.error?.details || (err as any)?.error?.message,
+              type: typeof err,
+              isError: err instanceof Error,
             });
+            
             if (isMounted) {
+               // Clean up audio/video processing
+               if (disconnectCallbackRef.current) {
+                 disconnectCallbackRef.current();
+                 disconnectCallbackRef.current = null;
+               }
                clearTimeout(connectionTimeout);
                // Clear timer if connection fails
                if (timerIntervalRef.current) {
@@ -378,8 +571,8 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
                setSessionStartTime(null);
                setTimeRemaining(null);
                setIsConnected(false);
-               const errorMessage = err instanceof Error ? err.message : "Connection failed. The API rejected the request.";
-               setError(`Connection failed: ${errorMessage}`);
+               isConnectedRef.current = false;
+               setError(userMessage);
                setHasStarted(false);
             }
           }
@@ -388,38 +581,106 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
       
       sessionRef.current = sessionPromise;
       console.log('[InterviewSession] Session promise created, waiting for connection...');
+      
+      // Catch any errors from the session promise itself (connection setup errors)
+      sessionPromise.catch((err) => {
+        console.error('[InterviewSession] ❌ Session Promise Rejected:', err);
+        if (isMounted) {
+          // Parse the error to get user-friendly message
+          const { userMessage, logMessage, errorType } = parseApiError(err);
+          
+          console.error(`[InterviewSession] Error Type: ${errorType}`);
+          console.error(`[InterviewSession] ${logMessage}`);
+          console.error('[InterviewSession] Full promise error details:', {
+            error: err,
+            message: (err as any)?.message || (err instanceof Error ? err.message : String(err)),
+            code: (err as any)?.code || (err as any)?.status || (err as any)?.statusCode || (err as any)?.error?.code,
+            name: (err as any)?.name || (err instanceof Error ? err.name : undefined),
+            stack: (err as any)?.stack || (err instanceof Error ? err.stack : undefined),
+            details: (err as any)?.details || (err as any)?.error?.details || (err as any)?.error?.message,
+            type: typeof err,
+            isError: err instanceof Error,
+          });
+          
+          // Clean up audio/video processing
+          if (disconnectCallbackRef.current) {
+            disconnectCallbackRef.current();
+            disconnectCallbackRef.current = null;
+          }
+          clearTimeout(connectionTimeout);
+          // Clear timer if connection fails
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+          setSessionStartTime(null);
+          setTimeRemaining(null);
+          setIsConnected(false);
+          isConnectedRef.current = false;
+          setError(userMessage);
+          setHasStarted(false);
+        }
+      });
 
       connectionTimeout = setTimeout(() => {
-        if (isMounted && !isConnected) {
+        if (isMounted && !isConnectedRef.current) {
           console.error('[InterviewSession] ⏱️ Connection timeout (15s) - connection not established');
+          console.error('[InterviewSession] ⚠️ This usually means:');
+          console.error('[InterviewSession]   1. API quota exceeded (most common - check Google Cloud Console)');
+          console.error('[InterviewSession]   2. Invalid API key');
+          console.error('[InterviewSession]   3. Network connection issues');
+          console.error('[InterviewSession]   4. Gemini API not enabled for your project');
+          console.error('[InterviewSession] Check the browser console for any errors above this message.');
+          // Clean up audio/video processing
+          if (disconnectCallbackRef.current) {
+            disconnectCallbackRef.current();
+            disconnectCallbackRef.current = null;
+          }
           // Clear timer state if timeout occurs
           setSessionStartTime(null);
           setTimeRemaining(null);
-          setError("Connection timed out after 15 seconds. Please check your API key and network connection.");
+          setIsConnected(false);
+          isConnectedRef.current = false;
+          setError("Connection timed out after 15 seconds. This usually means your API quota is exceeded, API key is invalid, or there's a network issue. Please check the browser console (F12) for detailed error messages.");
           setHasStarted(false);
-          cleanup();
+          // Clear the session ref
+          sessionRef.current = null;
         }
       }, 15000);
       console.log('[InterviewSession] Connection timeout timer set (15 seconds)');
 
     } catch (e: any) {
       console.error('[InterviewSession] ❌ Exception during session setup:', e);
+      
+      // Parse the error to get user-friendly message
+      const { userMessage, logMessage, errorType } = parseApiError(e);
+      
+      console.error(`[InterviewSession] Error Type: ${errorType}`);
+      console.error(`[InterviewSession] ${logMessage}`);
       console.error('[InterviewSession] Exception details:', {
-        name: e?.name,
-        message: e?.message,
-        stack: e?.stack,
+        error: e,
+        name: e?.name || (e instanceof Error ? e.name : undefined),
+        message: e?.message || (e instanceof Error ? e.message : String(e)),
+        code: e?.code || e?.status || e?.statusCode || (e as any)?.error?.code,
+        stack: e?.stack || (e instanceof Error ? e.stack : undefined),
+        details: e?.details || (e as any)?.error?.details || (e as any)?.error?.message,
+        type: typeof e,
+        isError: e instanceof Error,
         fullError: e
       });
+      
       if (isMounted) {
-        const errorMsg = e?.message || "Failed to initialize. Please check the browser console for details.";
-        setError(errorMsg);
+        setError(userMessage);
         setHasStarted(false);
+        setIsConnected(false);
+        isConnectedRef.current = false;
       }
       cleanup();
     }
   };
 
   const handleEndCall = () => {
+    isConnectedRef.current = false;
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
@@ -663,6 +924,14 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({ job, applica
         </div>
         <div className="text-slate-400 text-sm font-medium truncate max-w-[200px]">{job.title}</div>
       </div>
+
+      {/* Error Display (during connection) */}
+      {error && !isConnected && (
+        <div className="bg-red-500/10 border-b border-red-500/50 text-red-200 p-3 text-sm flex items-center gap-2">
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">

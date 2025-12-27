@@ -75,6 +75,12 @@ Then visit `http://localhost:4173/interview/` to test.
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /interview/index.html [L]
 </IfModule>
+
+# Headers for Firebase Auth (prevents COOP warnings)
+<IfModule mod_headers.c>
+  Header set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  Header set Cross-Origin-Embedder-Policy "unsafe-none"
+</IfModule>
 ```
 
 **Server Configuration Example (Nginx):**
@@ -83,6 +89,10 @@ Then visit `http://localhost:4173/interview/` to test.
 location /interview/ {
   alias /var/www/idatagear.com/interview/;
   try_files $uri $uri/ /interview/index.html;
+
+  # Headers for Firebase Auth (prevents COOP warnings)
+  add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+  add_header Cross-Origin-Embedder-Policy "unsafe-none" always;
 }
 ```
 

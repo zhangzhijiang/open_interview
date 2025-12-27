@@ -18,12 +18,14 @@ This document provides comprehensive instructions for building, deploying, and r
 ## Prerequisites
 
 ### Required Software
+
 - **Node.js**: Version 18 or higher
 - **npm**: Comes with Node.js (or use yarn/pnpm)
 - **Git**: For version control
 - **Code Editor**: VS Code recommended (with TypeScript extensions)
 
 ### Required Accounts & Services
+
 - **Google Cloud Platform Account**: For Gemini API key
 - **Firebase Account**: For authentication and Firestore database
 - **Web Hosting**: Server/cloud hosting for production deployment
@@ -31,6 +33,7 @@ This document provides comprehensive instructions for building, deploying, and r
 ### Required API Keys & Configuration
 
 1. **Gemini API Key**:
+
    - Obtain from [Google AI Studio](https://makersuite.google.com/app/apikey)
    - Required for AI interviews and evaluation reports
 
@@ -75,7 +78,8 @@ VITE_FIREBASE_APP_ID=your_app_id
 VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 ```
 
-**Important**: 
+**Important**:
+
 - `.env.local` is gitignored - never commit API keys
 - Use `VITE_` prefix for variables exposed to client-side code
 - For production builds, see [Building for Production](#building-for-production)
@@ -134,6 +138,7 @@ npm run dev
 ```
 
 The application will be available at:
+
 - **Local**: `http://localhost:3000/interview/`
 - **Network**: Accessible on your local network at `http://<your-ip>:3000/interview/`
 
@@ -185,6 +190,7 @@ VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 #### Option B: Environment Variables in Shell (Recommended for Manual Builds)
 
 **Windows PowerShell**:
+
 ```powershell
 $env:GEMINI_API_KEY="your_production_api_key"
 $env:VITE_FIREBASE_API_KEY="your_production_firebase_api_key"
@@ -193,6 +199,7 @@ npm run build
 ```
 
 **Windows CMD**:
+
 ```cmd
 set GEMINI_API_KEY=your_production_api_key
 set VITE_FIREBASE_API_KEY=your_production_firebase_api_key
@@ -201,6 +208,7 @@ npm run build
 ```
 
 **Linux/Mac**:
+
 ```bash
 export GEMINI_API_KEY="your_production_api_key"
 export VITE_FIREBASE_API_KEY="your_production_firebase_api_key"
@@ -215,6 +223,7 @@ npm run build
 ```
 
 This command:
+
 - Compiles TypeScript to JavaScript
 - Bundles all assets
 - Minifies code for production
@@ -224,6 +233,7 @@ This command:
 ### 3. Verify Build Output
 
 The `dist/` folder should contain:
+
 ```
 dist/
   ├── index.html
@@ -245,6 +255,7 @@ npm run preview
 Visit `http://localhost:4173/interview/` to test.
 
 **Important**: Test thoroughly:
+
 - Verify API keys work
 - Test all authentication flows
 - Confirm Firebase connectivity
@@ -258,6 +269,7 @@ Visit `http://localhost:4173/interview/` to test.
 ### Method 1: Traditional Web Server (FTP/SFTP)
 
 #### Step 1: Prepare Files
+
 Upload all contents of the `dist/` folder to your web server.
 
 #### Step 2: Server Configuration
@@ -269,12 +281,18 @@ Create/update `.htaccess` in the deployment directory:
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /interview/
-  
+
   # Handle Angular and React Router
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /interview/index.html [L]
+</IfModule>
+
+# Headers for Firebase Auth (prevents COOP warnings)
+<IfModule mod_headers.c>
+  Header set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  Header set Cross-Origin-Embedder-Policy "unsafe-none"
 </IfModule>
 
 # Enable compression
@@ -300,11 +318,15 @@ Add to your Nginx configuration:
 location /interview/ {
   alias /var/www/idatagear.com/interview/;
   try_files $uri $uri/ /interview/index.html;
-  
+
+  # Headers for Firebase Auth (prevents COOP warnings)
+  add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+  add_header Cross-Origin-Embedder-Policy "unsafe-none" always;
+
   # Enable gzip compression
   gzip on;
   gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-  
+
   # Cache static assets
   location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
     expires 1y;
@@ -316,6 +338,7 @@ location /interview/ {
 #### Step 3: Upload Files
 
 Using FTP/SFTP client:
+
 1. Connect to your server
 2. Navigate to web root directory
 3. Create `interview/` folder (if doesn't exist)
@@ -326,16 +349,19 @@ Using FTP/SFTP client:
 #### Vercel
 
 1. **Install Vercel CLI**:
+
    ```bash
    npm i -g vercel
    ```
 
 2. **Login**:
+
    ```bash
    vercel login
    ```
 
 3. **Set Environment Variables**:
+
    ```bash
    vercel env add GEMINI_API_KEY
    vercel env add VITE_FIREBASE_API_KEY
@@ -343,6 +369,7 @@ Using FTP/SFTP client:
    ```
 
 4. **Deploy**:
+
    ```bash
    vercel --prod
    ```
@@ -354,21 +381,24 @@ Using FTP/SFTP client:
 #### Netlify
 
 1. **Install Netlify CLI**:
+
    ```bash
    npm i -g netlify-cli
    ```
 
 2. **Login**:
+
    ```bash
    netlify login
    ```
 
 3. **Create `netlify.toml`**:
+
    ```toml
    [build]
      command = "npm run build"
      publish = "dist"
-   
+
    [[redirects]]
      from = "/*"
      to = "/index.html"
@@ -376,6 +406,7 @@ Using FTP/SFTP client:
    ```
 
 4. **Set Environment Variables** (in Netlify dashboard or CLI):
+
    ```bash
    netlify env:set GEMINI_API_KEY "your_key"
    netlify env:set VITE_FIREBASE_API_KEY "your_key"
@@ -390,11 +421,13 @@ Using FTP/SFTP client:
 #### GitHub Pages
 
 1. **Install gh-pages**:
+
    ```bash
    npm install --save-dev gh-pages
    ```
 
 2. **Add to `package.json`**:
+
    ```json
    "scripts": {
      "predeploy": "npm run build",
@@ -418,26 +451,26 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          cache: 'npm'
-      
+          node-version: "18"
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Build application
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -449,7 +482,7 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
         run: npm run build
-      
+
       - name: Deploy to server
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
@@ -461,6 +494,7 @@ jobs:
 ```
 
 **Configure GitHub Secrets**:
+
 - Go to repository Settings > Secrets and variables > Actions
 - Add all required secrets (API keys, FTP credentials, etc.)
 
@@ -471,6 +505,7 @@ jobs:
 ### Version Management
 
 Update version in `package.json`:
+
 ```json
 {
   "version": "1.0.0"
@@ -491,17 +526,20 @@ Update version in `package.json`:
 ### Release Steps
 
 1. **Update Version**:
+
    ```bash
    # Update version in package.json
    npm version patch  # or minor, major
    ```
 
 2. **Create Release Branch**:
+
    ```bash
    git checkout -b release/v1.0.0
    ```
 
 3. **Build and Test**:
+
    ```bash
    npm run build
    npm run preview
@@ -509,6 +547,7 @@ Update version in `package.json`:
    ```
 
 4. **Merge to Main**:
+
    ```bash
    git checkout main
    git merge release/v1.0.0
@@ -516,12 +555,14 @@ Update version in `package.json`:
    ```
 
 5. **Tag Release**:
+
    ```bash
    git tag -a v1.0.0 -m "Release version 1.0.0"
    git push origin v1.0.0
    ```
 
 6. **Deploy**:
+
    - If using CI/CD, deployment triggers automatically
    - If manual, follow deployment method above
 
@@ -538,6 +579,7 @@ Update version in `package.json`:
 If issues are found after deployment:
 
 1. **Immediate Rollback**:
+
    - Restore previous version from backup
    - Or revert Git commit and redeploy
 
@@ -558,13 +600,16 @@ If issues are found after deployment:
 ### Build Issues
 
 #### "Cannot find module" errors
+
 - **Solution**: Delete `node_modules` and `package-lock.json`, then `npm install`
 
 #### TypeScript errors
+
 - **Solution**: Run `npm run build` to see full error messages
 - Check `tsconfig.json` configuration
 
 #### Environment variables not loading
+
 - **Solution**: Ensure `VITE_` prefix for client-side variables
 - Restart dev server after changing `.env.local`
 - For production, set variables before build command
@@ -572,17 +617,20 @@ If issues are found after deployment:
 ### Deployment Issues
 
 #### 404 Errors on Refresh
+
 - **Cause**: Server not configured for SPA routing
 - **Solution**: Configure server to serve `index.html` for all routes (see server config above)
 
 #### API Key Not Working
-- **Solution**: 
+
+- **Solution**:
   - Verify environment variable set during build
   - Check API key restrictions in Google Cloud Console
   - Ensure key is valid and not expired
   - Check browser console for errors
 
 #### Assets Not Loading (404s)
+
 - **Solution**:
   - Verify `base: '/interview/'` in `vite.config.ts`
   - Check asset paths in build output
@@ -590,6 +638,7 @@ If issues are found after deployment:
   - Verify server serves static files correctly
 
 #### Firebase Connection Errors
+
 - **Solution**:
   - Verify Firebase config variables in environment
   - Check Firebase project is active
@@ -597,6 +646,7 @@ If issues are found after deployment:
   - Check Firestore rules allow access
 
 #### Firebase Authentication: `auth/unauthorized-domain` Error
+
 - **Cause**: Your deployment domain is not authorized in Firebase Console
 - **Solution**:
   1. Go to [Firebase Console](https://console.firebase.google.com/)
@@ -610,6 +660,7 @@ If issues are found after deployment:
   9. Clear browser cache and try again
 
 #### CORS Errors
+
 - **Solution**:
   - Configure CORS on your server
   - Add Firebase domains to allowed origins
@@ -618,17 +669,20 @@ If issues are found after deployment:
 ### Runtime Issues
 
 #### Interview Won't Connect
-- **Check**: 
+
+- **Check**:
   - API key is valid
   - Browser permissions (camera/microphone)
   - Network connectivity
   - Browser console for errors
 
 #### Timer Starts Before Connection
+
 - **Status**: Fixed - timer now starts only after successful connection
 - **If still happens**: Check `isConnected` state logic
 
 #### Interview History Not Saving
+
 - **Check**:
   - Firebase authentication is working
   - Firestore rules allow write access
@@ -644,24 +698,28 @@ If issues are found after deployment:
 ⚠️ **IMPORTANT**: Since this is a client-side React application, API keys are embedded in the JavaScript bundle and visible to anyone.
 
 #### Current Approach (Acceptable for MVP)
+
 - API keys are in client-side code
 - Suitable if you trust users and have proper restrictions
 
 #### Recommended Improvements
 
 1. **API Key Restrictions** (Minimum):
+
    - In Google Cloud Console, restrict API key to:
      - Specific HTTP referrers (your domain)
      - Specific APIs (only Gemini API)
    - Set usage quotas and limits
 
 2. **Backend Proxy** (Recommended for Production):
+
    - Create Node.js/Express backend
    - Store API keys server-side only
    - Create API endpoints that proxy requests to Gemini
    - Frontend calls your backend, not Gemini directly
 
    Example structure:
+
    ```
    Frontend → Your Backend API → Gemini API
    ```
@@ -675,6 +733,7 @@ If issues are found after deployment:
 ### Firebase Security Rules
 
 **Production Firestore Rules**:
+
 ```javascript
 rules_version = '2';
 service cloud.firestore {
@@ -699,6 +758,7 @@ service cloud.firestore {
 ### Content Security Policy
 
 Consider adding CSP headers:
+
 ```
 Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com; style-src 'self' 'unsafe-inline';
 ```
@@ -725,6 +785,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' h
 ### Monitoring
 
 Consider adding:
+
 - Error tracking (Sentry, LogRocket)
 - Analytics (Firebase Analytics, Google Analytics)
 - Performance monitoring
@@ -744,8 +805,8 @@ Consider adding:
 ## Support
 
 For issues or questions:
+
 1. Check this documentation
 2. Review troubleshooting section
 3. Check GitHub issues
 4. Contact development team
-

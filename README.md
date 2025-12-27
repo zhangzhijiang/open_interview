@@ -47,6 +47,7 @@ An AI-powered recruitment platform where employers post jobs and applicants unde
 ## Documentation
 
 - **[FEATURES.md](./FEATURES.md)**: Complete feature documentation and design overview
+- **[DEBUGGING.md](./DEBUGGING.md)**: Troubleshooting guide for connection issues and errors
 - **[PROMPTS.md](./PROMPTS.md)**: All AI prompts and instructions used in the application
 - **[BUILD_AND_DEPLOYMENT.md](./BUILD_AND_DEPLOYMENT.md)**: Comprehensive build, deployment, and release instructions
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)**: Deployment-specific guide (legacy, see BUILD_AND_DEPLOYMENT.md for latest)

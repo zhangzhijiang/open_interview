@@ -12,6 +12,7 @@ import { getUserProfile, saveUserProfile, InterviewHistoryItem } from './service
 import { Timestamp } from 'firebase/firestore';
 import { Sparkles, Briefcase, UserCircle, Upload, ArrowLeft, Loader2, Play, LogIn, LogOut } from 'lucide-react';
 import type { User } from 'firebase/auth';
+import { AdSenseAd } from './components/AdSenseAd';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('HOME');
@@ -217,10 +218,28 @@ export default function App() {
           Post a Job         </button>
       </div>
 
+      {/* Top Ad Banner */}
+      <div className="mb-6">
+        <AdSenseAd 
+          format="auto"
+          className="w-full"
+          showPlaceholder={false}
+        />
+      </div>
+
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {jobs.map(job => (
           <JobCard key={job.id} job={job} onSelect={handleJobSelect} />
         ))}
+      </div>
+
+      {/* Bottom Ad Banner */}
+      <div className="mt-6">
+        <AdSenseAd 
+          format="auto"
+          className="w-full"
+          showPlaceholder={false}
+        />
       </div>
     </div>
   );
@@ -476,6 +495,17 @@ export default function App() {
           </>
         )}
       </main>
+      
+      {/* Google AdSense Footer Ad */}
+      <footer className="w-full bg-slate-50 border-t border-slate-200 py-4">
+        <div className="max-w-7xl mx-auto px-4">
+          <AdSenseAd 
+            format="auto"
+            className="max-w-full"
+            showPlaceholder={false}
+          />
+        </div>
+      </footer>
     </div>
   );
 }
